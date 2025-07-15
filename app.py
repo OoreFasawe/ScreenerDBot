@@ -16,6 +16,7 @@ import asyncio
 # ========== CONFIGURATION ==========
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 DATA_ENDPOINT = "https://get-top-rvol-stocks-964914644779.europe-west1.run.app"
+ALLOWED_CHANNELS = ["stock-screener", "stocks-in-play"]
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -153,11 +154,12 @@ async def send_image_to_channels(image_buf):
     await client.wait_until_ready()
     channels = client.get_all_channels()
     sent = False
+    screener_file = nextcord.File(image_buf, 'screener.png')
     for channel in channels:
-        if channel is not None and isinstance(channel, nextcord.TextChannel) and (channel.name == "stock-screener" or channel.name == "stocks-in-play"):
+        if channel is not None and isinstance(channel, nextcord.TextChannel) and channel.name in ALLOWED_CHANNELS:
             logger.info(f"Sending screener image to channel: {channel.name} (ID: {channel.id})")
             try:
-                await channel.send(file=nextcord.File(image_buf, 'screener.png'))
+                await channel.send(file=screener_file)
                 logger.info(f"Image sent to channel: {channel.name}")
                 sent = True
             except Exception as e:
@@ -171,7 +173,7 @@ async def send_text_to_channels(message):
     channels = client.get_all_channels()
     sent = False
     for channel in channels:
-        if channel is not None and isinstance(channel, nextcord.TextChannel) and (channel.name == "stock-screener" or channel.name == "stocks-in-play"):
+        if channel is not None and isinstance(channel, nextcord.TextChannel) and channel.name in ALLOWED_CHANNELS:
             try:
                 await channel.send(message)
                 sent = True
