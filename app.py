@@ -154,7 +154,7 @@ async def send_image_to_channels(image_buf):
     channels = client.get_all_channels()
     sent = False
     for channel in channels:
-        if channel is not None and isinstance(channel, nextcord.TextChannel):
+        if channel is not None and isinstance(channel, nextcord.TextChannel) and (channel.name == "stock-screener" or channel.name == "stocks-in-play"):
             logger.info(f"Sending screener image to channel: {channel.name} (ID: {channel.id})")
             try:
                 await channel.send(file=nextcord.File(image_buf, 'screener.png'))
@@ -164,6 +164,19 @@ async def send_image_to_channels(image_buf):
                 logger.error(f"Failed to send image to channel {channel.name}: {e}")
     if not sent:
         logger.warning("No eligible text channels found to send the image.")
+    return sent
+
+async def send_text_to_channels(message):
+    await client.wait_until_ready()
+    channels = client.get_all_channels()
+    sent = False
+    for channel in channels:
+        if channel is not None and isinstance(channel, nextcord.TextChannel):
+            try:
+                await channel.send(message)
+                sent = True
+            except Exception as e:
+                logger.error(f"Failed to send text to channel {channel.name}: {e}")
     return sent
 
 @app.post("/notify")
@@ -176,7 +189,21 @@ async def notify(request: Request):
         logger.error(f"Failed to parse JSON payload: {e}")
         return {"status": "error", "message": "Invalid JSON payload."}
     
+    no_stocks_message = data.get("no_stocks_message")
     stocks = data.get("stocks", [])
+
+    if not stocks and no_stocks_message:
+        # Send a plain text message to Discord
+        future = asyncio.run_coroutine_threadsafe(
+            send_text_to_channels(no_stocks_message), client.loop
+        )
+        try:
+            sent = future.result()
+        except Exception as e:
+            logger.error(f"Exception while sending text to Discord: {e}")
+            return {"status": "error", "message": "Failed to send text to Discord."}
+        return {"status": "No stocks message sent" if sent else "No eligible channels found"}
+
     logger.info(f"Extracted 'stocks' from payload. Type: {type(stocks)}")
     try:
         stocks = convert_payload_to_list(stocks)

@@ -1,6 +1,6 @@
+fastapi
+uvicorn
 nextcord
-requests
 pandas
 matplotlib
-uvicorn
-fastapi
+requests
