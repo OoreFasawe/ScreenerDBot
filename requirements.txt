@@ -1,0 +1,6 @@
+nextcord
+requests
+pandas
+matplotlib
+uvicorn
+fastapi
