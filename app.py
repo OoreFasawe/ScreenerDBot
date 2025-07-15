@@ -11,6 +11,7 @@ from nextcord.ext import commands, tasks
 import json
 import requests
 import logging
+import asyncio
 
 # ========== CONFIGURATION ==========
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
@@ -148,6 +149,23 @@ def generate_table_image(stocks):
     return buf
 
 # ========== DISCORD BOT LOGIC ==========
+async def send_image_to_channels(image_buf):
+    await client.wait_until_ready()
+    channels = client.get_all_channels()
+    sent = False
+    for channel in channels:
+        if channel is not None and isinstance(channel, nextcord.TextChannel):
+            logger.info(f"Sending screener image to channel: {channel.name} (ID: {channel.id})")
+            try:
+                await channel.send(file=nextcord.File(image_buf, 'screener.png'))
+                logger.info(f"Image sent to channel: {channel.name}")
+                sent = True
+            except Exception as e:
+                logger.error(f"Failed to send image to channel {channel.name}: {e}")
+    if not sent:
+        logger.warning("No eligible text channels found to send the image.")
+    return sent
+
 @app.post("/notify")
 async def notify(request: Request):
     logger.info("Received POST request to /notify endpoint.")
@@ -181,20 +199,13 @@ async def notify(request: Request):
     except Exception as e:
         logger.error(f"Error generating table image: {e}")
         return {"status": "error", "message": "Failed to generate table image."}
-    await client.wait_until_ready()
-    channels = client.get_all_channels()
-    sent = False
-    for channel in channels:
-        if channel is not None and isinstance(channel, nextcord.TextChannel):
-            logger.info(f"Sending screener image to channel: {channel.name} (ID: {channel.id})")
-            try:
-                await channel.send(file=nextcord.File(image_buf, 'screener.png'))
-                logger.info(f"Image sent to channel: {channel.name}")
-                sent = True
-            except Exception as e:
-                logger.error(f"Failed to send image to channel {channel.name}: {e}")
-    if not sent:
-        logger.warning("No eligible text channels found to send the image.")
+    # Use run_coroutine_threadsafe to send the image on the Discord bot's event loop
+    future = asyncio.run_coroutine_threadsafe(send_image_to_channels(image_buf), client.loop)
+    try:
+        sent = future.result()  # This will block until done
+    except Exception as e:
+        logger.error(f"Exception while sending image to Discord: {e}")
+        return {"status": "error", "message": "Failed to send image to Discord."}
     logger.info("All messages sent. Closing bot.")
     return {"status": "Image sent" if sent else "No eligible channels found"}
 
