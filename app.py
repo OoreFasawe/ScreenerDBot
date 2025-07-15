@@ -150,23 +150,53 @@ def generate_table_image(stocks):
 # ========== DISCORD BOT LOGIC ==========
 @app.post("/notify")
 async def notify(request: Request):
-    data = await request.json()
+    logger.info("Received POST request to /notify endpoint.")
+    try:
+        data = await request.json()
+        logger.info(f"Payload received: {json.dumps(data)[:500]}{'...truncated' if len(json.dumps(data)) > 500 else ''}")
+    except Exception as e:
+        logger.error(f"Failed to parse JSON payload: {e}")
+        return {"status": "error", "message": "Invalid JSON payload."}
     
     stocks = data.get("stocks", [])
-    stocks = convert_payload_to_list(stocks)
+    logger.info(f"Extracted 'stocks' from payload. Type: {type(stocks)}")
+    try:
+        stocks = convert_payload_to_list(stocks)
+        logger.info(f"Converted payload to list. Number of stocks: {len(stocks)}")
+    except Exception as e:
+        logger.error(f"Error converting payload to list: {e}")
+        return {"status": "error", "message": "Failed to process stocks payload."}
     # Filter columns here
     stocks = filter_stock_columns(stocks, COLUMNS_TO_KEEP)
+    logger.info(f"Filtered columns. Columns kept: {COLUMNS_TO_KEEP}")
     # Sort by RVol descending
-    stocks.sort(key=lambda x: float(x.get("RVol") or 0), reverse=True)
-    image_buf = generate_table_image(stocks)
+    try:
+        stocks.sort(key=lambda x: float(x.get("RVol") or 0), reverse=True)
+        logger.info("Sorted stocks by RVol descending.")
+    except Exception as e:
+        logger.error(f"Error sorting stocks by RVol: {e}")
+    try:
+        image_buf = generate_table_image(stocks)
+        logger.info("Generated table image for stocks.")
+    except Exception as e:
+        logger.error(f"Error generating table image: {e}")
+        return {"status": "error", "message": "Failed to generate table image."}
     await client.wait_until_ready()
     channels = client.get_all_channels()
+    sent = False
     for channel in channels:
         if channel is not None and isinstance(channel, nextcord.TextChannel):
             logger.info(f"Sending screener image to channel: {channel.name} (ID: {channel.id})")
-            await channel.send(file=nextcord.File(image_buf, 'screener.png'))
+            try:
+                await channel.send(file=nextcord.File(image_buf, 'screener.png'))
+                logger.info(f"Image sent to channel: {channel.name}")
+                sent = True
+            except Exception as e:
+                logger.error(f"Failed to send image to channel {channel.name}: {e}")
+    if not sent:
+        logger.warning("No eligible text channels found to send the image.")
     logger.info("All messages sent. Closing bot.")
-    return {"status": "Image sent"}
+    return {"status": "Image sent" if sent else "No eligible channels found"}
 
 def start_bot():
     uvicorn.run(app, host="0.0.0.0", port=8080)
