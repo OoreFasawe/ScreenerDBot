@@ -154,11 +154,12 @@ async def send_image_to_channels(image_buf):
     await client.wait_until_ready()
     channels = client.get_all_channels()
     sent = False
-    screener_file = nextcord.File(image_buf, 'screener.png')
     for channel in channels:
         if channel is not None and isinstance(channel, nextcord.TextChannel) and channel.name in ALLOWED_CHANNELS:
             logger.info(f"Sending screener image to channel: {channel.name} (ID: {channel.id})")
             try:
+                image_buf.seek(0)  # Reset buffer pointer to the start
+                screener_file = nextcord.File(image_buf, 'screener.png')
                 await channel.send(file=screener_file)
                 logger.info(f"Image sent to channel: {channel.name}")
                 sent = True
